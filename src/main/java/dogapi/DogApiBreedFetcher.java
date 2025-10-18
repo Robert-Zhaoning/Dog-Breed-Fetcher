@@ -19,17 +19,63 @@ public class DogApiBreedFetcher implements BreedFetcher {
 
     /**
      * Fetch the list of sub breeds for the given breed from the dog.ceo API.
+     *
      * @param breed the breed to fetch sub breeds for
      * @return list of sub breeds for the given breed
      * @throws BreedNotFoundException if the breed does not exist (or if the API call fails for any reason)
      */
+
     @Override
-    public List<String> getSubBreeds(String breed) {
-        // TODO Task 1: Complete this method based on its provided documentation
-        //      and the documentation for the dog.ceo API. You may find it helpful
-        //      to refer to the examples of using OkHttpClient from the last lab,
-        //      as well as the code for parsing JSON responses.
-        // return statement included so that the starter code can compile and run.
-        return new ArrayList<>();
+    public List<String> getSubBreeds(String breed) throws BreedNotFoundException, IOException {
+        if (breed == null || breed.isBlank()) {
+            throw new IllegalArgumentException("Breed must not be null or blank");
+        }
+
+        String normalized = breed.trim().toLowerCase(Locale.ROOT);
+        String url = "https://dog.ceo/api/breed/" + normalized + "/list";
+
+        Request request = new Request.Builder().url(url).get().build();
+        try (Response response = client.newCall(request).execute()) {
+
+            if (response.body() == null) {
+                throw new IOException("Empty response from Dog API");
+            }
+
+            String jsonData = response.body().string();
+
+            try {
+                JSONObject json = new JSONObject(jsonData);
+                String status = json.optString("status", "");
+                int code = json.optInt("code", 0);
+                String apiMsg = json.optString("message", "");
+
+                // 1) breed 不存在 → 受检异常
+                if ("error".equalsIgnoreCase(status) && code == 404) {
+                    // 尽量带上 API 的 message，方便排查
+                    String msg = apiMsg.isBlank() ? ("Breed not found: " + normalized) : apiMsg;
+                    throw new BreedNotFoundException(msg);
+                }
+
+                // 2) 其他 HTTP 或 API 层异常 → IOException
+                if (!response.isSuccessful() || !"success".equalsIgnoreCase(status)) {
+                    String extra = apiMsg.isBlank() ? "" : (", message=" + apiMsg);
+                    throw new IOException("Unexpected Dog API response: HTTP "
+                            + response.code() + ", status=" + status + extra);
+                }
+
+                // 3) 解析子品种数组
+                JSONArray arr = json.optJSONArray("message");
+                List<String> result = new ArrayList<>();
+                if (arr != null) {
+                    for (int i = 0; i < arr.length(); i++) {
+                        result.add(arr.getString(i));
+                    }
+                }
+                return Collections.unmodifiableList(result);
+
+            } catch (org.json.JSONException je) {
+                throw new IOException("Failed to parse Dog API JSON", je);
+            }
+        }
     }
 }
