@@ -1,7 +1,6 @@
 package dogapi;
 
 import java.util.*;
-import java.io.IOException;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -28,25 +27,23 @@ public class CachingBreedFetcher implements BreedFetcher {
     }
 
     @Override
-    public List<String> getSubBreeds(String breed)
-            throws BreedNotFoundException, IOException {
+    public List<String> getSubBreeds(String breed) throws BreedNotFoundException {
         Objects.requireNonNull(breed, "breed must not be null");
-
         final String key = breed.trim().toLowerCase();
 
         List<String> cached = cache.get(key);
-        if (cached != null) {
-            return cached;
-        }
+        if (cached != null) return cached;
 
         callsMade++;
-        List<String> fetched = delegate.getSubBreeds(breed);
-
-        List<String> snapshot = Collections.unmodifiableList(List.copyOf(fetched));
-        cache.put(key, snapshot);
-        return snapshot;
+        try {
+            List<String> fetched = delegate.getSubBreeds(breed);
+            List<String> snapshot = Collections.unmodifiableList(List.copyOf(fetched));
+            cache.put(key, snapshot);
+            return snapshot;
+        } catch (BreedNotFoundException e) {
+            throw e;
+        }
     }
-
     public int getCallsMade() {
         return callsMade;
     }
